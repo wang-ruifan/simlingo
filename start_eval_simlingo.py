@@ -171,18 +171,18 @@ def kill_dead_jobs(jobs):
 configs = [
     {
     "agent": "simlingo",
-    "checkpoint": "/PATH/TO/REPO/outputs/simlingo/checkpoints/epoch=013.ckpt/pytorch_model.pt",
+    "checkpoint": "/home/wang/simlingo/outputs/simlingo/checkpoints/epoch=013.ckpt/pytorch_model.pt",
     "benchmark": "bench2drive",
-    "route_path": "/PATH/TO/REPO/leaderboard/data/bench2drive_split",
+    "route_path": "/home/wang/simlingo/leaderboard/data/bench2drive_split",
     "seeds": [1,2,3], # TODO: change depending on how many eval seeds you wanna run (paper uses one eval seed on three train seeds)
     "tries": 2,
-    "out_root": "/PATH/TO/REPO/eval_results/Bench2Drive",
+    "out_root": "/home/wang/simlingo/eval_results/Bench2Drive",
     "carla_root": "~/software/carla0915",
-    "repo_root": "/PATH/TO/REPO",
-    "agent_file": "/PATH/TO/REPO/team_code/agent_simlingo.py",
+    "repo_root": "/home/wang/simlingo",
+    "agent_file": "/home/wang/simlingo/team_code/agent_simlingo.py",
     "team_code": "team_code",
     "agent_config": "not_used",
-    "username": "YOUR_USERNAME"
+    "username": "wang"
     }
     ] # TODO: change to your paths and model, you can add multiple configs here, whch get evaluated after each other
 
