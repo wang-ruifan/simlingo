@@ -16,7 +16,16 @@ import carla
 from scipy.integrate import RK45
 
 from srunner.scenariomanager.carla_data_provider import CarlaDataProvider
-from leaderboard.autoagents import autonomous_agent, autonomous_agent_local
+from leaderboard.autoagents import autonomous_agent
+
+# Try to import the legacy/expected `autonomous_agent_local` module. If it's not present
+# (some leaderboard distributions use `autonomous_agent` only), fall back to using
+# `autonomous_agent` as a compatibility shim.
+try:
+  from leaderboard.autoagents import autonomous_agent_local
+except Exception:
+  import importlib
+  autonomous_agent_local = importlib.import_module('leaderboard.autoagents.autonomous_agent')
 from nav_planner import RoutePlanner
 from lateral_controller import LateralPIDController
 from privileged_route_planner import PrivilegedRoutePlanner

@@ -57,7 +57,7 @@ cd {cfg["repo_root"]}
 
 export CARLA_ROOT={cfg["carla_root"]}
 export PYTHONPATH=$PYTHONPATH:{cfg["carla_root"]}/PythonAPI/carla
-export PYTHONPATH=$PYTHONPATH:{cfg["carla_root"]}/PythonAPI/carla/dist/carla-0.9.15-py3.7-linux-x86_64.egg
+export PYTHONPATH=$PYTHONPATH:{cfg["carla_root"]}/PythonAPI/carla/dist/carla-0.9.15-py3.9-linux-x86_64.egg
 export PYTHONPATH=$PYTHONPATH:{cfg["repo_root"]}/Bench2Drive/leaderboard
 export PYTHONPATH=$PYTHONPATH:{cfg["repo_root"]}/Bench2Drive/scenario_runner
 export SCENARIO_RUNNER_ROOT={cfg["repo_root"]}/Bench2Drive/scenario_runner

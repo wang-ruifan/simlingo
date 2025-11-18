@@ -58,7 +58,7 @@ def get_entry_point():
     return 'LingoAgent'
 
 
-DEBUG = False # saves images during evaluation
+DEBUG = True # saves images during evaluation
 HD_VIZ = False
 USE_UKF = True
 
@@ -862,10 +862,56 @@ class LingoAgent(autonomous_agent.AutonomousAgent):
         Also writes logging files to disk.
         """
 
-        del self.model
-        del self.config
-        if self.cfg.data_module.encoder == 'llavanext':
-            del self.processor
+        # Safely delete large attributes if they exist. Use try/except to
+        # prevent cleanup from raising exceptions that would hide route results.
+        try:
+            if hasattr(self, 'model'):
+                del self.model
+        except Exception as e:
+            print(f"Warning while deleting model: {e}", flush=True)
+
+        try:
+            if hasattr(self, 'config'):
+                del self.config
+        except Exception as e:
+            print(f"Warning while deleting config: {e}", flush=True)
+
+        # The OmegaConf DictConfig raises when trying to access missing keys via
+        # attribute access (e.g. self.cfg.data_module.encoder). Use safe access
+        # patterns (dict-style .get and secondary fallbacks) to avoid
+        # omegaconf.errors.ConfigAttributeError during cleanup.
+        try:
+            encoder = None
+            cfg = getattr(self, 'cfg', None)
+            if cfg is not None:
+                # try mapping-style get first (works for dict and DictConfig)
+                try:
+                    data_module = cfg.get('data_module', None)
+                except Exception:
+                    # fallback to attribute access but guarded
+                    try:
+                        data_module = cfg.data_module
+                    except Exception:
+                        data_module = None
+
+                if data_module is not None:
+                    try:
+                        encoder = data_module.get('encoder', None)
+                    except Exception:
+                        try:
+                            encoder = data_module.encoder
+                        except Exception:
+                            encoder = None
+
+            if encoder == 'llavanext' and hasattr(self, 'processor'):
+                try:
+                    del self.processor
+                except Exception as e:
+                    print(f"Warning while deleting processor: {e}", flush=True)
+        except Exception as e:
+            # Catch-all to ensure destroy never raises and prevents leaderboard
+            # from registering results due to cleanup errors.
+            print(f"Warning during destroy cleanup: {e}", flush=True)
 
 
 # Filter Functions

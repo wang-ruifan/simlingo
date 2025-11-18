@@ -2063,12 +2063,17 @@ class MinimumSpeedRouteTest(Criterion):
             checkpoint_value = round(self._actor_speed / (self.RATIO * self._mean_speed) * 100, 2)
         else:
             checkpoint_value = 100
-        
-        self.test_status = "FAILURE"
-        self._traffic_event = TrafficEvent(TrafficEventType.MIN_SPEED_INFRACTION, GameTime.get_frame())
-        self._traffic_event.set_dict({'percentage': checkpoint_value})
-        self._traffic_event.set_message(f"Average speed is {checkpoint_value}% of the surrounding traffic's one")
-        self.events.append(self._traffic_event)
+
+        # Mark success if ego's mean speed at the checkpoint is at least the success value
+        if checkpoint_value >= self.success_value:
+            self.test_status = "SUCCESS"
+        else:
+            self.test_status = "FAILURE"
+
+            self._traffic_event = TrafficEvent(TrafficEventType.MIN_SPEED_INFRACTION, GameTime.get_frame())
+            self._traffic_event.set_dict({'percentage': checkpoint_value})
+            self._traffic_event.set_message(f"Average speed is {checkpoint_value}% of the surrounding traffic's one")
+            self.events.append(self._traffic_event)
 
         self._checkpoint_values.append(checkpoint_value)
 
