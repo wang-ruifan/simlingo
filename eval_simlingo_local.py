@@ -11,6 +11,7 @@ import select
 import signal
 import time
 import argparse
+import json
 from pathlib import Path
 
 
@@ -22,6 +23,8 @@ class LocalEvaluator:
         self.carla_server = None
         # 标记是否由本脚本启动了 CARLA，只有在为 True 时才停止它
         self.started_carla = False
+        # 进度文件路径
+        self.progress_file = os.path.join(config['out_root'], '.eval_progress.json')
         
     def setup_environment(self):
         """设置环境变量"""
@@ -167,14 +170,51 @@ class LocalEvaluator:
                 # 进程已不存在
                 pass
     
+    def save_progress(self, seed, route_idx, total_routes):
+        """保存当前评估进度到文件"""
+        try:
+            progress = {
+                'seed': seed,
+                'route_idx': route_idx,
+                'total_routes': total_routes,
+                'timestamp': time.strftime("%Y-%m-%d %H:%M:%S"),
+                'agent': self.config.get('agent', 'unknown'),
+                'benchmark': self.config.get('benchmark', 'unknown'),
+            }
+            with open(self.progress_file, 'w') as f:
+                json.dump(progress, f, indent=2)
+        except Exception as e:
+            print(f"保存进度时出错: {e}")
+    
+    def load_progress(self):
+        """加载上次的评估进度"""
+        if not os.path.exists(self.progress_file):
+            return None
+        try:
+            with open(self.progress_file, 'r') as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"读取进度文件时出错: {e}")
+            return None
+    
+    def clear_progress(self):
+        """清除进度文件"""
+        try:
+            if os.path.exists(self.progress_file):
+                os.remove(self.progress_file)
+        except Exception as e:
+            print(f"清除进度文件时出错: {e}")
+    
     def run_single_route(self, route_file, route_id, seed, port, tm_port, output_dir):
         """运行单个路由评估"""
         cfg = self.config
         
-        # 创建输出目录
-        viz_path = os.path.join(output_dir, "viz", route_id)
-        os.makedirs(viz_path, exist_ok=True)
-        os.environ['SAVE_PATH'] = viz_path
+        # 创建输出目录 - 让 agent 自己创建子目录，我们只设置 viz 根目录
+        viz_base_path = os.path.join(output_dir, "viz")
+        os.makedirs(viz_base_path, exist_ok=True)
+        # 注意：SAVE_PATH 应该以 / 结尾，确保 agent 拼接时路径正确
+        # agent 会自己从场景名称中提取路由 ID 并追加到这个路径
+        os.environ['SAVE_PATH'] = viz_base_path + '/'
         
         result_file = os.path.join(output_dir, "res", f"{route_id}_res.json")
         log_file = os.path.join(output_dir, "out", f"{route_id}_out.log")
@@ -310,12 +350,19 @@ class LocalEvaluator:
                 print(f"# 输出目录: {output_dir}")
                 print(f"{'#'*80}\n")
                 
+                # 获取原始总数和偏移量（用于恢复进度时保持正确的索引）
+                total_routes_original = cfg.get('total_routes_original', len(route_files))
+                start_offset = cfg.get('start_route_offset', 0)
+                
                 # 运行每个路由
                 for idx, route_file in enumerate(route_files, 1):
                     route_filename = os.path.basename(route_file)
                     route_id = route_filename.split("_")[-1].replace(".xml", "").zfill(3)
                     
-                    print(f"\n进度: [{idx}/{len(route_files)}]")
+                    # 实际的全局索引（考虑偏移）
+                    global_idx = idx + start_offset
+                    
+                    print(f"\n进度: [{global_idx}/{total_routes_original}]")
                     
                     try:
                         self.run_single_route(
@@ -328,6 +375,8 @@ class LocalEvaluator:
                         )
                     except KeyboardInterrupt:
                         print("\n评估被用户中断")
+                        # 保存进度（使用全局索引和原始总数）
+                        self.save_progress(seed, global_idx, total_routes_original)
                         raise
                     except Exception as e:
                         print(f"✗ 路由 {route_id} 评估出错: {e}")
@@ -335,6 +384,9 @@ class LocalEvaluator:
                         traceback.print_exc()
                         # 继续下一个路由
                         continue
+                    
+                    # 保存进度（在每个路由完成后，使用全局索引和原始总数）
+                    self.save_progress(seed, global_idx, total_routes_original)
                     
                     # 每个路由之间短暂休息
                     time.sleep(2)
@@ -344,6 +396,9 @@ class LocalEvaluator:
             print(f"\n{'='*80}")
             print("所有评估任务完成！")
             print(f"{'='*80}\n")
+            
+            # 所有任务完成后清除进度文件
+            self.clear_progress()
             
         finally:
             self.stop_carla_server()
@@ -394,6 +449,12 @@ def main():
                        help='最大评估路由数量（用于测试）')
     parser.add_argument('--start-carla', action='store_true', default=False,
                        help='由本脚本在开始时启动 CARLA（默认: False），若 leaderboard 会自动启动 CARLA 请不要使用此选项')
+    
+    resume_group = parser.add_mutually_exclusive_group()
+    resume_group.add_argument('--resume', action='store_true',
+                             help='从上次中断处继续评估（如果有保存的进度）')
+    resume_group.add_argument('--from-scratch', action='store_true',
+                             help='从头开始评估，忽略之前保存的进度')
     group = parser.add_mutually_exclusive_group()
     group.add_argument('--stop-carla-on-exit', dest='stop_carla_on_exit', action='store_true',
                        help='在脚本退出或收到 Ctrl+C 时尝试停止 CARLA（默认：开启，可能会关闭由其它流程启动的 CARLA 实例）')
@@ -456,6 +517,66 @@ def main():
     
     # 运行评估
     evaluator = LocalEvaluator(config)
+    
+    # 检查是否有保存的进度
+    saved_progress = evaluator.load_progress()
+    resume_from_progress = False
+    start_seed_idx = 0
+    start_route_idx = 0
+    
+    if saved_progress and not args.from_scratch:
+        print(f"\n发现上次的评估进度:")
+        print(f"  Agent: {saved_progress.get('agent', 'unknown')}")
+        print(f"  Benchmark: {saved_progress.get('benchmark', 'unknown')}")
+        print(f"  Seed: {saved_progress.get('seed', 'unknown')}")
+        print(f"  已完成路由: {saved_progress.get('route_idx', 0)}/{saved_progress.get('total_routes', 0)}")
+        print(f"  保存时间: {saved_progress.get('timestamp', 'unknown')}")
+        
+        if args.resume:
+            resume_from_progress = True
+            print("\n将从上次中断处继续评估...")
+        else:
+            # 交互式询问用户
+            try:
+                response = input("\n是否从上次中断处继续？[y/n] (默认: y): ").strip().lower()
+                if response in ('', 'y', 'yes'):
+                    resume_from_progress = True
+                    print("将从上次中断处继续评估...")
+                else:
+                    print("将从头开始评估...")
+                    evaluator.clear_progress()
+            except (EOFError, KeyboardInterrupt):
+                print("\n将从头开始评估...")
+                evaluator.clear_progress()
+        
+        if resume_from_progress:
+            # 找到对应的 seed 和 route 索引
+            saved_seed = saved_progress.get('seed')
+            saved_route_idx = saved_progress.get('route_idx', 0)
+            
+            try:
+                start_seed_idx = args.seeds.index(int(saved_seed))
+                start_route_idx = saved_route_idx  # 从下一个路由开始
+                print(f"从 Seed {saved_seed} 的第 {start_route_idx + 1} 个路由继续...")
+            except (ValueError, AttributeError):
+                print("警告: 无法匹配保存的进度，将从头开始...")
+                resume_from_progress = False
+                evaluator.clear_progress()
+    elif args.from_scratch and saved_progress:
+        print("\n检测到 --from-scratch 参数，将清除之前的进度并从头开始...")
+        evaluator.clear_progress()
+    
+    # 保存原始路由总数（用于进度显示）
+    total_routes = len(route_files)
+    
+    # 根据进度调整 seeds 和 route_files
+    if resume_from_progress:
+        config['seeds'] = args.seeds[start_seed_idx:]
+        route_files = route_files[start_route_idx:]
+        # 将原始总数存入配置，供进度保存使用
+        config['total_routes_original'] = total_routes
+        config['start_route_offset'] = start_route_idx
+    
     # 注册 SIGINT 处理器：在 Ctrl+C 时优先尝试清理 CARLA（若配置允许）然后退出
     def _handle_sigint(sig, frame):
         try:
@@ -471,7 +592,7 @@ def main():
     try:
         evaluator.run_evaluation(
             route_files=route_files,
-            seeds=args.seeds,
+            seeds=config['seeds'],  # 使用可能被调整过的 seeds
             start_port=args.port,
             start_tm_port=args.tm_port
         )

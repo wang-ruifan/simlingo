@@ -226,7 +226,8 @@ class LingoAgent(autonomous_agent.AutonomousAgent):
                     roi=self.logger_region_of_interest,
             )
         
-        self.debug_save_path = self.save_path + '/debug_viz' + f'/{self.session}/iter_{self.iter}/{route_type}/{route_number}_{time.strftime("%Y_%m_%d_%H_%M_%S")}'
+        # self.debug_save_path = self.save_path + '/debug_viz' + f'/{self.session}/iter_{self.iter}/{route_type}/{route_number}_{time.strftime("%Y_%m_%d_%H_%M_%S")}'
+        self.debug_save_path = self.save_path
         Path(self.debug_save_path).mkdir(parents=True, exist_ok=True)
         self.save_path_metric = self.debug_save_path + '/metric'
         Path(self.save_path_metric).mkdir(parents=True, exist_ok=True)

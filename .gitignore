@@ -4,7 +4,7 @@ pretrained/
 results/
 outputs/
 eval/
-# eval_results/
+eval_results/
 pretrained/
 
 # Byte-compiled / optimized / DLL files
